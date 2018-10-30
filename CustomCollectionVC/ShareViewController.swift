@@ -7,32 +7,30 @@
 //
 
 import UIKit
-
-//
-//  ShareViewController.swift
-//  Gather
-//
-//  Created by Sudhanshu Sudhanshu on 25/10/18.
-//  Copyright © 2018 Sudhanshu Sudhanshu. All rights reserved.
-//
-
-import UIKit
+import Photos
+import MessageUI
 
 let optionViewHeight: CGFloat = 300
 
+enum ShareItemKey: String {
+    case message, attachment
+}
+
 class ShareViewController: UIViewController {
+    var selectedItem: ShareItem?
+    
     var cancelFullButton: UIButton = {
         let button = UIButton(type: .custom)
-        button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width)
+        button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
         button.backgroundColor = .clear
         button.addTarget(self, action: #selector(cancelAction(_:)), for: .touchUpInside)
         return button
     }()
-    
     var collectionView: UICollectionView = {
         let layout = UICollectionViewFlowLayout()
         layout.itemSize = CGSize(width: 70, height: 40)
         layout.sectionInset = UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
+        
         let cv = UICollectionView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: optionViewHeight), collectionViewLayout: layout)
         cv.backgroundColor = .white
         return cv
@@ -87,10 +85,14 @@ class ShareViewController: UIViewController {
         return view
     }()
     
+    var shareItem: [ShareItemKey: Any] = [:]
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(white: 0, alpha: 0.15)
+        
         populateOptions()
+        
         setupView()
     }
     
@@ -100,18 +102,6 @@ class ShareViewController: UIViewController {
     }
     
     fileprivate func setupView() {
-        
-        //        let tapGR = UITapGestureRecognizer(target: self, action: #selector(tapGestureHandler))
-        //        tapGR.cancelsTouchesInView = false
-        //        view.addGestureRecognizer(tapGR)
-        
-        // StackView
-        prepareOptionsUI()
-        
-    }
-    
-    
-    fileprivate func prepareOptionsUI() {
         //        let width: CGFloat = view.bounds.size.width
         view.addSubview(cancelFullButton)
         
@@ -164,6 +154,8 @@ class ShareViewController: UIViewController {
     
     // Actions
     func show() {
+        self.modalPresentationStyle = .overFullScreen
+        self.modalTransitionStyle = .crossDissolve
         UIApplication.shared.keyWindow?.rootViewController?.present(self, animated: true)
     }
     
@@ -184,25 +176,179 @@ class ShareViewController: UIViewController {
         // Instagram
         // Stories
         // WhatsApp
-        // Facebook
         // Twitter
-        // Messanger
         // SMS
         // Others
         
+        //        if inviteObj.schemeAvailable(scheme: "instagram://") {
         optionsArr.append(ShareItem(title: "Instagram", image: #imageLiteral(resourceName: "instagram"), type: .instagram))
+        //        }else if inviteObj.schemeAvailable(scheme: "stories://") {
         optionsArr.append(ShareItem(title: "Stories", image: #imageLiteral(resourceName: "instagram"), type: .stories))
+        //        }else if inviteObj.schemeAvailable(scheme: "whatsapp://") {
         optionsArr.append(ShareItem(title: "WhatsApp", image: #imageLiteral(resourceName: "whatapp"), type: .whatsapp))
-        optionsArr.append(ShareItem(title: "Facebook", image: #imageLiteral(resourceName: "fb"), type: .facebook))
+        //        }else if inviteObj.schemeAvailable(scheme: "twitter://") {
         optionsArr.append(ShareItem(title: "Twitter", image: #imageLiteral(resourceName: "twitter"), type: .twitter))
-        optionsArr.append(ShareItem(title: "Messanger", image: #imageLiteral(resourceName: "messenger"), type: .messanger))
+        //        }
+        
         optionsArr.append(ShareItem(title: "SMS", image: #imageLiteral(resourceName: "messenger"), type: .sms))
         optionsArr.append(ShareItem(title: "Others", image: #imageLiteral(resourceName: "more"), type: .others))
         
     }
     
+    
+    fileprivate func openTwitterShare() {
+        
+        if UIApplication.shared.canOpenURL(URL(string: "twitter://")!) {
+            let messageTextEncoded: String = (shareItem[.message] as! String).addingPercentEncoding(withAllowedCharacters: CharacterSet.urlHostAllowed) ?? ""
+            let urlString: String = "twitter://post?message=\(messageTextEncoded)"
+            let twitterPostURL : URL? = URL(string: urlString)
+            
+            if twitterPostURL != nil {
+                if #available(iOS 10.0, *) {
+                    UIApplication.shared.open(twitterPostURL!)
+                } else {
+                    // Fallback on earlier versions
+                    UIApplication.shared.openURL(twitterPostURL!)
+                }
+            }
+        }
+        else {
+            // TODO: app not installed
+        }
+    }
+    
+    fileprivate func shareOnWhatsApp() {
+        // Can share a text only
+        let messageText = shareItem[.message] as! String
+        let messageTextEncoded: String = messageText.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlHostAllowed) ?? ""
+        let urlString: String = "whatsapp://send?text=\(messageTextEncoded)"
+        guard let url : URL = URL(string: urlString) else {return}
+        
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
+    }
+    
+    fileprivate func shareOnInstaStories() {
+        //             add instagram-stories to the LSApplicationQueriesSchemes
+        
+        // Verify app can open custom URL scheme, open if able
+        let urlScheme: URL = URL(string: "instagram-stories://share")!
+        if UIApplication.shared.canOpenURL(urlScheme) {
+            let image = #imageLiteral(resourceName: "group")
+            
+            // Assign background image asset and attribution link URL to pasteboard
+            let pasteboardItems: Array = [["com.instagram.sharedSticker.backgroundImage" : image.pngData()!,
+                                           "com.instagram.sharedSticker.contentURL" : "longwalks://"]]
+            let pasteboardOptions = [UIPasteboard.OptionsKey.expirationDate : Date().addingTimeInterval(60*5)]
+            
+            // This call is iOS 10+, can use 'setItems' depending on what versions you support
+            UIPasteboard.general.setItems(pasteboardItems, options: pasteboardOptions)
+            
+            UIApplication.shared.open(urlScheme, options: [:], completionHandler: nil)
+        }
+    }
+    
+    fileprivate func shareOnInstagram() {
+        // Ref: https://www.instagram.com/developer/mobile-sharing/iphone-hooks/
+        let urlScheme: URL = URL(string: "instagram://")!
+        if UIApplication.shared.canOpenURL(urlScheme) {
+            let image = #imageLiteral(resourceName: "group")
+            saveImage(image: image) { (asset) in
+                let fetchOptions = PHFetchOptions()
+                fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+                let fetchResult = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+                if let lastAsset = fetchResult.firstObject {
+                    let localIdentifier = lastAsset.localIdentifier
+                    let u = "instagram://library?LocalIdentifier=" + localIdentifier
+                    let url = URL(string: u)!
+                    DispatchQueue.main.async {
+                        if UIApplication.shared.canOpenURL(url) {
+                            UIApplication.shared.open(url, options: [:], completionHandler: nil)//openURL(NSURL(string: u)!)
+                        } else {
+                            // TODO: Show message if app is not installed
+                        }
+                    }
+                    
+                }
+            }
+            
+        }
+    }
+    
+    fileprivate func openEmailComposer(messageText: String) {
+        guard MFMailComposeViewController.canSendMail() else {
+            // TODO: app not available
+            return
+        }
+        
+        let messageText = shareItem[.message] as! String
+        
+        let mailComposerVC = MFMailComposeViewController()
+        mailComposerVC.mailComposeDelegate = self
+        mailComposerVC.setMessageBody(messageText, isHTML: false)
+        self.present(mailComposerVC, animated: true, completion: nil)
+    }
+    
+    fileprivate func openMessageComposer() {
+        let messageText = shareItem[.message] as! String
+        
+        guard MFMessageComposeViewController.canSendText() else {
+            // TODO: app not available
+            return
+        }
+        let messageController = MFMessageComposeViewController()
+        messageController.messageComposeDelegate  = self
+        messageController.body = messageText
+        self.present(messageController, animated: true, completion: nil)
+    }
 }
 
+extension ShareViewController: UIImagePickerControllerDelegate {
+    
+    fileprivate func saveImage(image: UIImage, completion: ((PHAsset?)->())? = nil) {
+        
+        
+        func save() {
+            var placeholder: PHObjectPlaceholder!
+            let collection = PHAssetCollection.init()
+            
+            PHPhotoLibrary.shared().performChanges({
+                let assetCreateRequest = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                
+                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection), let photoPlaceholder = assetCreateRequest.placeholderForCreatedAsset else{ return }
+                
+                placeholder = photoPlaceholder
+                let fastEnumeration: NSFastEnumeration = Array([photoPlaceholder]) as NSFastEnumeration
+                albumChangeRequest.addAssets(fastEnumeration)
+                
+            }, completionHandler: ({ (success, error) in
+                guard let placeholder = placeholder else {
+                    completion?(nil)
+                    return
+                }
+                if success {
+                    let assets:PHFetchResult<PHAsset> =  PHAsset.fetchAssets(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
+                    
+                    completion?(assets.firstObject)
+                }else {
+                    
+                }
+            }))
+        }
+        
+        
+        if PHPhotoLibrary.authorizationStatus() == .authorized {
+            save()
+        }else {
+            PHPhotoLibrary.requestAuthorization { (status) in
+                if status == .authorized {
+                    save()
+                }
+            }
+        }
+    }
+}
 
 extension ShareViewController: UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     func numberOfSections(in collectionView: UICollectionView) -> Int {
@@ -265,42 +411,30 @@ extension ShareViewController: UICollectionViewDelegate, UICollectionViewDataSou
         let item = optionsArr[indexPath.item]
         switch item.type {
         case .instagram?:
+            shareOnInstagram()
             
             break
         case .stories?:
-            
-            //             add instagram-stories to the LSApplicationQueriesSchemes
-            
-            // Verify app can open custom URL scheme, open if able
-            let urlScheme: URL = URL(string: "instagram-stories://share")!
-            if UIApplication.shared.canOpenURL(urlScheme) {
-                let image = #imageLiteral(resourceName: "group")
-                // Assign background image asset and attribution link URL to pasteboard
-                let pasteboardItems: Array = [["com.instagram.sharedSticker.backgroundImage" : image.pngData()!,
-                                               "com.instagram.sharedSticker.contentURL" : "longwalks://"]]
-                let pasteboardOptions = [UIPasteboard.OptionsKey.expirationDate : Date().addingTimeInterval(60*5)]
-                
-                // This call is iOS 10+, can use 'setItems' depending on what versions you support
-                UIPasteboard.general.setItems(pasteboardItems, options: pasteboardOptions)
-                
-                UIApplication.shared.open(urlScheme, options: [:], completionHandler: nil)
-            }
+            shareOnInstaStories()
             
             break
         case .whatsapp?:
-            break
-        case .facebook?:
+            shareOnWhatsApp()
+            
             break
         case .twitter?:
-            break
-        case .messanger?:
+            openTwitterShare()
+            
             break
         case .sms?:
+            openMessageComposer()
+            
             break
         case .others?:
-            let activityController = UIActivityViewController(activityItems: ["Share view controller"], applicationActivities: nil)
             
-            activityController.completionWithItemsHandler = {
+            let activityViewController = UIActivityViewController(activityItems: [shareItem[.message] as! String] , applicationActivities: nil)
+            
+            activityViewController.completionWithItemsHandler = {
                 (activity, success, item, error) in
                 if (success && error == nil) {
                     
@@ -310,22 +444,59 @@ extension ShareViewController: UICollectionViewDelegate, UICollectionViewDataSou
                 }
             }
             
-            self.present(activityController, animated: true, completion: nil)
+            if activityViewController.responds(to: #selector(getter: UIViewController.popoverPresentationController)) {
+                
+                let window = UIApplication.shared.keyWindow
+                activityViewController.popoverPresentationController?.sourceView = window
+                activityViewController.popoverPresentationController?.sourceRect = CGRect(x: (window?.bounds.width ?? 2)/2, y: (window?.bounds.height ?? 64), width: 0, height: 0)
+                
+                self.present(activityViewController, animated: true, completion: nil)
+                
+            } else {
+                
+                self.present(activityViewController, animated: true, completion: {})
+            }
+            
             break
         case .none:
             break
         }
-        dismiss()
+        //        dismiss()
+    }
+}
+
+extension ShareViewController: MFMailComposeViewControllerDelegate {
+    
+    public func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+        controller.dismiss(animated: true, completion: nil)
+    }
+}
+
+extension ShareViewController: MFMessageComposeViewControllerDelegate {
+    
+    func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+        
+        if result == .sent {
+            
+        }
+        else if result == .cancelled {
+            
+        }
+        else {
+            
+        }
+        controller.dismiss(animated: true, completion: nil)
     }
 }
 
 enum ShareCustomScheme: String {
     case instagram = "instagram-stories://share"
     case twitter = "twitter://"
+    case whatsapp = "whatsapp://"
 }
 
 enum ShareItemType: String {
-    case instagram, stories, whatsapp, facebook, twitter, messanger, sms, others
+    case instagram, stories, whatsapp, twitter, sms, others
 }
 
 
@@ -365,6 +536,8 @@ class ItemCell: UICollectionViewCell {
     }
     
     private func setupViews() {
+        //        self.backgroundColor = .red
+        
         stackView.addArrangedSubview(imageView)
         stackView.addArrangedSubview(titleLabel)
         

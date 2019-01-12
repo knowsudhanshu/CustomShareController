@@ -17,7 +17,9 @@ enum ShareItemKey: String {
 }
 
 class ShareViewController: UIViewController {
+    var presenter: UIViewController? = UIApplication.shared.keyWindow?.rootViewController
     var selectedItem: ShareItem?
+    var shareItemType: String = ""
     
     var cancelFullButton: UIButton = {
         let button = UIButton(type: .custom)
@@ -28,7 +30,7 @@ class ShareViewController: UIViewController {
     }()
     var collectionView: UICollectionView = {
         let layout = UICollectionViewFlowLayout()
-        layout.itemSize = CGSize(width: 70, height: 40)
+        layout.itemSize = CGSize(width: 70, height: 70)
         layout.sectionInset = UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
         
         let cv = UICollectionView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: optionViewHeight), collectionViewLayout: layout)
@@ -46,7 +48,7 @@ class ShareViewController: UIViewController {
         label.numberOfLines = 0
         label.textAlignment = .center
         label.backgroundColor = .white
-        label.font = UIFont.boldSystemFont(ofSize: 18)
+        label.font = UIFont.systemFont(ofSize: 18, weight: .bold)
         
         label.addConstraint(NSLayoutConstraint(item: label, attribute: .height, relatedBy: .equal, toItem: nil, attribute: .notAnAttribute, multiplier: 1, constant: 40))
         
@@ -67,7 +69,7 @@ class ShareViewController: UIViewController {
         
         let button = UIButton(type: .custom)
         button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 10)
-        button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 18)
+        button.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .bold)
         button.setTitle("CANCEL", for: .normal)
         button.setTitleColor(#colorLiteral(red: 0.8823529412, green: 0.3215686275, blue: 0.1176470588, alpha: 1), for: .normal)
         button.backgroundColor = .white
@@ -87,13 +89,32 @@ class ShareViewController: UIViewController {
     
     var shareItem: [ShareItemKey: Any] = [:]
     
+    var isVisible: Bool = true
+    
+    init() {
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    init(with shareItem: [ShareItemKey: Any]) {
+        self.shareItem = shareItem
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
+        
         view.backgroundColor = UIColor(white: 0, alpha: 0.15)
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(appMovedToBackground), name: UIApplication.willResignActiveNotification, object: nil)
         
         populateOptions()
         
         setupView()
+        
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -116,20 +137,19 @@ class ShareViewController: UIViewController {
         stackView.axis = .vertical
         view.addSubview(stackView)
         stackView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stackView.leftAnchor.constraint(equalTo: view.leftAnchor),
+            stackView.rightAnchor.constraint(equalTo: view.rightAnchor),
+            ])
+        
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         //
-        //
-        let leftConstraint = NSLayoutConstraint(item: stackView, attribute: .leadingMargin, relatedBy: .equal, toItem: view, attribute: .leadingMargin, multiplier: 1, constant:-16)
-        
-        let rightConstraint = NSLayoutConstraint(item: stackView, attribute: .trailingMargin, relatedBy: .equal, toItem: view, attribute: .trailingMargin, multiplier: 1, constant:16)
         
         let heightConstraint = NSLayoutConstraint(item: stackView, attribute: .height, relatedBy: .equal, toItem: nil, attribute: .notAnAttribute, multiplier: 1, constant: optionViewHeight)
         
-        //        let bottomConstraint = NSLayoutConstraint(item: collectionView, attribute: .bottomMargin, relatedBy: .equal, toItem: view, attribute: .bottomMargin, multiplier: 1, constant: 0)
-        
         viewTopConstraint = NSLayoutConstraint(item: stackView, attribute: .topMargin, relatedBy: .equal, toItem: view, attribute: .bottomMargin, multiplier: 1, constant: 40)
         
-        NSLayoutConstraint.activate([leftConstraint, rightConstraint, viewTopConstraint, heightConstraint])
+        NSLayoutConstraint.activate([viewTopConstraint, heightConstraint])
     }
     
     
@@ -141,14 +161,16 @@ class ShareViewController: UIViewController {
         })
     }
     
-    @objc fileprivate func hideOptions() {
-        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseOut, animations: { [weak self] in
+    @objc fileprivate func hideOptions(dismiss: Bool = false) {
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 1, options: .curveEaseOut, animations: {
             
-            self?.viewTopConstraint.constant = 40//UIScreen.main.bounds.height
+            self.viewTopConstraint.constant = 40//UIScreen.main.bounds.height
             
-            self?.view.layoutIfNeeded()
-            }, completion: { finished in
+            self.view.layoutIfNeeded()
+        }, completion: { finished in
+            if dismiss == true {
                 self.dismiss(animated: true, completion: nil)
+            }
         })
     }
     
@@ -156,15 +178,15 @@ class ShareViewController: UIViewController {
     func show() {
         self.modalPresentationStyle = .overFullScreen
         self.modalTransitionStyle = .crossDissolve
-        UIApplication.shared.keyWindow?.rootViewController?.present(self, animated: true)
+        UIApplication.shared.keyWindow?.topMostWindowController()?.present(self, animated: true)
     }
     
     @objc fileprivate func cancelAction(_ sender: UIButton) {
-        dismiss()
+        hideOptions(dismiss: true)
     }
     
     @objc fileprivate func tapGestureHandler(_ sender: UITapGestureRecognizer) {
-        dismiss()
+        hideOptions(dismiss: true)
     }
     
     fileprivate func dismiss() {
@@ -180,21 +202,26 @@ class ShareViewController: UIViewController {
         // SMS
         // Others
         
-        //        if inviteObj.schemeAvailable(scheme: "instagram://") {
-        optionsArr.append(ShareItem(title: "Instagram", image: #imageLiteral(resourceName: "instagram"), type: .instagram))
-        //        }else if inviteObj.schemeAvailable(scheme: "stories://") {
-        optionsArr.append(ShareItem(title: "Stories", image: #imageLiteral(resourceName: "instagram"), type: .stories))
-        //        }else if inviteObj.schemeAvailable(scheme: "whatsapp://") {
-        optionsArr.append(ShareItem(title: "WhatsApp", image: #imageLiteral(resourceName: "whatapp"), type: .whatsapp))
-        //        }else if inviteObj.schemeAvailable(scheme: "twitter://") {
-        optionsArr.append(ShareItem(title: "Twitter", image: #imageLiteral(resourceName: "twitter"), type: .twitter))
-        //        }
+        if schemeAvailable(scheme: "instagram://") {
+            optionsArr.append(ShareItem(title: "Instagram", image: #imageLiteral(resourceName: "share_icon_instagram"), type: .instagram))
+        }else if schemeAvailable(scheme: "stories://") {
+            optionsArr.append(ShareItem(title: "Stories", image: #imageLiteral(resourceName: "share_icon_stories"), type: .stories))
+        }else if schemeAvailable(scheme: "whatsapp://") {
+            optionsArr.append(ShareItem(title: "WhatsApp", image: #imageLiteral(resourceName: "share_icon_whatsapp"), type: .whatsapp))
+        }else if schemeAvailable(scheme: "twitter://") {
+            optionsArr.append(ShareItem(title: "Twitter", image: #imageLiteral(resourceName: "share_icon_twitter"), type: .twitter))
+        }
         
-        optionsArr.append(ShareItem(title: "SMS", image: #imageLiteral(resourceName: "messenger"), type: .sms))
-        optionsArr.append(ShareItem(title: "Others", image: #imageLiteral(resourceName: "more"), type: .others))
+        optionsArr.append(ShareItem(title: "SMS", image: #imageLiteral(resourceName: "share_icon_imessage"), type: .sms))
+        optionsArr.append(ShareItem(title: "Others", image: #imageLiteral(resourceName: "share_icon_other"), type: .others))
         
     }
-    
+    func schemeAvailable(scheme: String) -> Bool {
+        if let url = URL(string: scheme) {
+            return UIApplication.shared.canOpenURL(url)
+        }
+        return false
+    }
     
     fileprivate func openTwitterShare() {
         
@@ -235,7 +262,7 @@ class ShareViewController: UIViewController {
         // Verify app can open custom URL scheme, open if able
         let urlScheme: URL = URL(string: "instagram-stories://share")!
         if UIApplication.shared.canOpenURL(urlScheme) {
-            let image = #imageLiteral(resourceName: "group")
+            guard let image = self.shareItem[.attachment] as? UIImage else { return }
             
             // Assign background image asset and attribution link URL to pasteboard
             let pasteboardItems: Array = [["com.instagram.sharedSticker.backgroundImage" : image.pngData()!,
@@ -253,7 +280,7 @@ class ShareViewController: UIViewController {
         // Ref: https://www.instagram.com/developer/mobile-sharing/iphone-hooks/
         let urlScheme: URL = URL(string: "instagram://")!
         if UIApplication.shared.canOpenURL(urlScheme) {
-            let image = #imageLiteral(resourceName: "group")
+            guard let image = self.shareItem[.attachment] as? UIImage else { return }
             saveImage(image: image) { (asset) in
                 let fetchOptions = PHFetchOptions()
                 fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
@@ -300,50 +327,64 @@ class ShareViewController: UIViewController {
         let messageController = MFMessageComposeViewController()
         messageController.messageComposeDelegate  = self
         messageController.body = messageText
-        self.present(messageController, animated: true, completion: nil)
+        
+        if let attachment = shareItem[.attachment] as? UIImage {
+            let imageData = attachment.jpegData(compressionQuality: 1)
+            messageController.addAttachmentData(imageData!, typeIdentifier: "image/JPEG", filename: "invitation.png")
+        }
+        
+        
+        self.present(messageController, animated: true)
+    }
+    
+}
+
+protocol StorableAsset{}
+extension StorableAsset where Self: UIImage {
+    func saveToPhotoLibrary(completion: ((PHAsset?)->())? = nil) {
+        var placeholder: PHObjectPlaceholder!
+        let collection = PHAssetCollection.init()
+        
+        PHPhotoLibrary.shared().performChanges({
+            let assetCreateRequest = PHAssetChangeRequest.creationRequestForAsset(from: self)
+            
+            guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection), let photoPlaceholder = assetCreateRequest.placeholderForCreatedAsset else{ return }
+            
+            placeholder = photoPlaceholder
+            let fastEnumeration: NSFastEnumeration = Array([photoPlaceholder]) as NSFastEnumeration
+            albumChangeRequest.addAssets(fastEnumeration)
+            
+        }, completionHandler: ({ (success, error) in
+            guard let placeholder = placeholder else {
+                completion?(nil)
+                return
+            }
+            if success {
+                let assets:PHFetchResult<PHAsset> =  PHAsset.fetchAssets(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
+                
+                completion?(assets.firstObject)
+            }else {
+                
+            }
+        }))
     }
 }
 
+extension UIImage: StorableAsset{}
 extension ShareViewController: UIImagePickerControllerDelegate {
     
     fileprivate func saveImage(image: UIImage, completion: ((PHAsset?)->())? = nil) {
         
-        
-        func save() {
-            var placeholder: PHObjectPlaceholder!
-            let collection = PHAssetCollection.init()
-            
-            PHPhotoLibrary.shared().performChanges({
-                let assetCreateRequest = PHAssetChangeRequest.creationRequestForAsset(from: image)
-                
-                guard let albumChangeRequest = PHAssetCollectionChangeRequest(for: collection), let photoPlaceholder = assetCreateRequest.placeholderForCreatedAsset else{ return }
-                
-                placeholder = photoPlaceholder
-                let fastEnumeration: NSFastEnumeration = Array([photoPlaceholder]) as NSFastEnumeration
-                albumChangeRequest.addAssets(fastEnumeration)
-                
-            }, completionHandler: ({ (success, error) in
-                guard let placeholder = placeholder else {
-                    completion?(nil)
-                    return
-                }
-                if success {
-                    let assets:PHFetchResult<PHAsset> =  PHAsset.fetchAssets(withLocalIdentifiers: [placeholder.localIdentifier], options: nil)
-                    
-                    completion?(assets.firstObject)
-                }else {
-                    
-                }
-            }))
-        }
-        
-        
         if PHPhotoLibrary.authorizationStatus() == .authorized {
-            save()
+            image.saveToPhotoLibrary { (asset) in
+                completion?(asset)
+            }
         }else {
             PHPhotoLibrary.requestAuthorization { (status) in
                 if status == .authorized {
-                    save()
+                    image.saveToPhotoLibrary { (asset) in
+                        completion?(asset)
+                    }
                 }
             }
         }
@@ -406,6 +447,41 @@ extension ShareViewController: UICollectionViewDelegate, UICollectionViewDataSou
      }
      */
     
+    fileprivate func openNativeShare() {
+        
+        var activityItems: [Any] = []
+        if let message = shareItem[.message] as? String {
+            activityItems.append(message)
+        }
+        if let attachment = shareItem[.attachment] as? UIImage {
+            activityItems.append(attachment)
+        }
+        
+        let activityViewController = UIActivityViewController(activityItems: activityItems , applicationActivities: nil)
+        
+        activityViewController.completionWithItemsHandler = {
+            (activity, success, item, error) in
+            if (success && error == nil) {
+                
+            }else if (error != nil)  {
+                // Error
+                
+            }
+            self.hideOptions(dismiss: true)
+        }
+        
+        if activityViewController.responds(to: #selector(getter: UIViewController.popoverPresentationController)) {
+            
+            let window = UIApplication.shared.keyWindow
+            activityViewController.popoverPresentationController?.sourceView = window
+            activityViewController.popoverPresentationController?.sourceRect = CGRect(x: (window?.bounds.width ?? 2)/2, y: (window?.bounds.height ?? 64), width: 0, height: 0)
+            self.present(activityViewController, animated: true)
+            
+        } else {
+            self.present(activityViewController, animated: true)
+        }
+    }
+    
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         
         let item = optionsArr[indexPath.item]
@@ -432,43 +508,32 @@ extension ShareViewController: UICollectionViewDelegate, UICollectionViewDataSou
             break
         case .others?:
             
-            let activityViewController = UIActivityViewController(activityItems: [shareItem[.message] as! String] , applicationActivities: nil)
-            
-            activityViewController.completionWithItemsHandler = {
-                (activity, success, item, error) in
-                if (success && error == nil) {
-                    
-                }else if (error != nil)  {
-                    // Error
-                    
-                }
-            }
-            
-            if activityViewController.responds(to: #selector(getter: UIViewController.popoverPresentationController)) {
-                
-                let window = UIApplication.shared.keyWindow
-                activityViewController.popoverPresentationController?.sourceView = window
-                activityViewController.popoverPresentationController?.sourceRect = CGRect(x: (window?.bounds.width ?? 2)/2, y: (window?.bounds.height ?? 64), width: 0, height: 0)
-                
-                self.present(activityViewController, animated: true, completion: nil)
-                
-            } else {
-                
-                self.present(activityViewController, animated: true, completion: {})
-            }
+            openNativeShare()
             
             break
         case .none:
             break
         }
-        //        dismiss()
+        hideOptions()
+    }
+    
+    @objc func appMovedToBackground() {
+        self.hideOptions(dismiss: true)
     }
 }
 
 extension ShareViewController: MFMailComposeViewControllerDelegate {
     
     public func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+        switch result {
+        case .sent:
+            break
+
+        default:
+            break
+        }
         controller.dismiss(animated: true, completion: nil)
+        self.hideOptions(dismiss: true)
     }
 }
 
@@ -476,16 +541,13 @@ extension ShareViewController: MFMessageComposeViewControllerDelegate {
     
     func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
         
-        if result == .sent {
-            
+        switch result {
+        case .sent:
+            break
+        default:
+            break
         }
-        else if result == .cancelled {
-            
-        }
-        else {
-            
-        }
-        controller.dismiss(animated: true, completion: nil)
+        self.hideOptions(dismiss: true)
     }
 }
 
@@ -516,7 +578,7 @@ class ItemCell: UICollectionViewCell {
     
     var titleLabel: UILabel = {
         let label = UILabel()
-        label.font = UIFont.systemFont(ofSize: 12)
+        label.font = UIFont.systemFont(ofSize: 12, weight: .medium)
         label.textAlignment = .center
         return label
     }()
@@ -536,7 +598,6 @@ class ItemCell: UICollectionViewCell {
     }
     
     private func setupViews() {
-        //        self.backgroundColor = .red
         
         stackView.addArrangedSubview(imageView)
         stackView.addArrangedSubview(titleLabel)
@@ -556,4 +617,19 @@ class ItemCell: UICollectionViewCell {
         fatalError("init(coder:) has not been implemented")
     }
     
+}
+
+public extension UIWindow {
+    
+    /** @return Returns the current Top Most ViewController in hierarchy.   */
+    public func topMostWindowController()->UIViewController? {
+        
+        var topController = rootViewController
+        
+        while let presentedController = topController?.presentedViewController {
+            topController = presentedController
+        }
+        
+        return topController
+    }
 }

@@ -1,6 +1,6 @@
 //
 //  ViewController.swift
-//  CustomCollectionVC
+//  CustomShareController
 //
 //  Created by Sudhanshu Sudhanshu on 27/10/18.
 //  Copyright © 2018 Sudhanshu Sudhanshu. All rights reserved.
